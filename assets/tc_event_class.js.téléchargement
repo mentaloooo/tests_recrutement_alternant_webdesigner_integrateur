@@ -1,0 +1,1 @@
+function TcEventsTrigger(reference,name,params){return this.init=function(){tc_events_global(reference,name,params)},this.init(),this}

@@ -1,0 +1,610 @@
+document.addEventListener('DOMContentLoaded', function () {
+    // Au changement & leave (blur) du champ quantité
+    var lastProductBaseQuantity = { value: 1 }
+    document.querySelector('#quantite').addEventListener('change', function (e) {
+        quantiteChange(lastProductBaseQuantity, e.target)
+    });
+    document.querySelector('#quantite').addEventListener('mouseup', function (e) {
+        quantiteChange(lastProductBaseQuantity, e)
+    });
+    Array.from(document.querySelectorAll('.quantiteTrigger')).forEach(function (elem) {
+        elem.addEventListener('click', function () {
+            quantiteChange(lastProductBaseQuantity, document.querySelector('#quantite'))
+        })
+    })
+    
+});
+
+/**
+ * Hide or show elements
+ * @param {*} id
+ * @param {*} action
+ */
+function hideOrShow(id, action) {
+    if (document.querySelector(id)) {
+        switch (action) {
+            case 'hide':
+                document.querySelector(id).classList.add('visibility-hidden')
+                break;
+            default:
+                document.querySelector(id).classList.remove('visibility-hidden')
+                break;
+        }
+    }
+}
+
+/*
+ * 
+ */
+function quantiteChange (lastProductBaseQuantity, target) {
+    if (parseInt(target.value) === lastProductBaseQuantity.value) {
+        return
+    }
+    manageDiscountPopin({}, document.querySelector('#quantite'), function () {
+        var productBaseQuantity = toAbsoluteQty(document.querySelector("#quantite").value);
+        // si la dernière quantité connu est différente de la "nouvelle" quantité
+        if (parseInt(lastProductBaseQuantity.value) != parseInt(productBaseQuantity) || productBaseQuantity == 1) {
+            var cart_timeout;
+            clearTimeout(cart_timeout);
+            cart_timeout = setTimeout(function () {
+                // Mise à jour du prix
+                updateTcPrice(lastValidationKnow.price.unitprice, lastValidationKnow.price.unitprice_discount, tva);
+                vatPriceDiscount = lastValidationKnow.price.unitprice_discount * tva;
+                vatPrice = lastValidationKnow.price.unitprice * tva;
+                // Gestion de l'affichage prix et promo
+                displayPriceAndPromo(vatPrice, vatPriceDiscount, productBaseQuantity);
+                // Gestion de l'affichage Oney
+                displayOney(vatPrice, vatPriceDiscount, productBaseQuantity);
+
+                lastProductBaseQuantity.value = parseInt(productBaseQuantity);
+            }, 1000);
+        }
+    }, function () {
+        target.value = lastProductBaseQuantity.value
+    })
+}
+
+
+/**
+ * API url
+ * @type {String}
+ */
+if (typeof wmPrefixApiUrl === 'undefined') {
+    var wmPrefixApiUrl = '/api/configurateur/configurations.json';
+}
+/**
+ * Dernière configuration commerciale
+ * @type {Object}
+ */
+var lastCc = {};
+
+/**
+ * Total appel Ajax
+ * @type {Number}
+ */
+var counter = 0;
+
+/**
+ * Appel configurateur en cours
+ * @type {boolean}
+ */
+var isConfigurateurProcess = false;
+
+/**
+ * Image_url param for tms
+ * @type {String}
+ */
+var image_url;
+
+/**
+ * Image_url param for tms
+ * @type {String}
+ */
+var productImageUrl
+
+/**
+ * the Overlay
+ * @type {String}
+ */
+var overlay;
+
+/**
+ * Dernière validation
+ * @type {object}
+ */
+var formRawValidation;
+
+/**
+ * It's "DEGUEULASSE" BUT it's AB testing
+ * adjust mecanisme fields for AB testing
+ * EVOL: We have to add hide fields in configurator
+ * @param {*} payload 
+ */
+function prefilledValues (payload) {
+    var body = JSON.parse(payload)
+    var prdRef = body.config_1.product_reference
+    switch (prdRef) {
+        case 'PRD-14_store-californien':
+            body.config_1.prefilled_values['CH-602_version-fiche-produit'] = 'OPT-2396_version-b';
+            body.config_1.prefilled_values['CH-149_couleur-de-commandes'] = 'OPT-243_blanc';
+            body.config_1.prefilled_values['CH-150_couleur-plaques-et-chanette-basse'] = 'OPT-271_blanc';
+            switch (body['config_1']['prefilled_values']['CH-146_type-de-rail']) {
+                case 'OPT-235_rail-premium':
+                    if (body.config_1.prefilled_values['CH-147_couleur-de-rail-classique'] === 'OPT-242_noir-ral-9005') {
+                        body.config_1.prefilled_values['CH-149_couleur-de-commandes'] = 'OPT-245_noir'
+                        body.config_1.prefilled_values['CH-150_couleur-plaques-et-chanette-basse'] = 'OPT-272_noir'
+                    }
+                    break;
+            }
+            return JSON.stringify(body)
+        case 'PRD-44_volet-roulant-rnovation-new':
+            if (body.config_1.prefilled_values['CH-469_commande'] === 'OPT-1434_moteur-somfy-solaire') {
+                body.config_1.prefilled_values['CH-467_anti-vol'] = 'OPT-1234_sans'
+            } else if (body.config_1.prefilled_values['CH-469_commande'] === 'OPT-1431_moteur-standard-solaire'){
+                body.config_1.prefilled_values['CH-467_anti-vol'] = 'OPT-2460_attache-securite-moteur-solaire-standard'
+            }
+            return JSON.stringify(body)
+    }
+    return payload
+}
+
+/**
+ * Appel Ajax
+ * @param {String} url
+ * @param {String} body
+ * @param {Object} eventToEmit
+ */
+function AjaxCall (url, body, eventToEmit) {
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', url);
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    xhr.onload = function () {
+        if (xhr.status === 200) {
+            eventToEmit.data = xhr.responseText
+
+            var config = JSON.parse(eventToEmit.data);
+            formRawValidation = config.config_1.validation;
+            //Gestion de la galerie
+            var gallery = config.config_1.gallery;
+            image_url = gallery[0];
+            if (image_url)
+                changethumbnailsCaroussel(gallery);
+
+            lastValidationKnow = config.config_1;
+            updateTcPrice(config.config_1.price.unitprice, config.config_1.price.unitprice_discount, tva);
+            //Mise à jour du prix du produit
+            var quantity = toAbsoluteQty(document.querySelector("#quantite").value);
+            vatPriceDiscount = config.config_1.price.unitprice_discount * tva;
+            vatPrice = config.config_1.price.unitprice * tva;
+            // Gestion du prix et des promo
+            displayPriceAndPromo(vatPrice, vatPriceDiscount, quantity);
+            // Gestion Oney
+            displayOney(vatPrice, vatPriceDiscount, quantity);
+
+
+            //Gestion tc_data tms
+            var tcData = [];
+            var cursorValidation = 0;
+            tcData = config.config_1.tc_data;
+            var tcEventValues = {};
+
+            for (var arrayKeyTcVars in tc_vars) {
+                tcEventValues[arrayKeyTcVars] = tc_vars[arrayKeyTcVars];
+            }
+
+            for (var arrayKeyTcData in tcData) {
+                tcEventValues[arrayKeyTcData] = tcData[arrayKeyTcData];
+                tc_vars[arrayKeyTcData] = tcData[arrayKeyTcData];
+            }
+
+            //make post request using easyHTTP, variable declared in configurateur.js
+            updateTcProductID(tcEventValues["product_color"], productPageConfigId)
+
+            if (cursorValidation <= 1) {
+                var clickName = '';
+                switch (cursorValidation) {
+                    case 0:
+                        clickName = 'config_in';
+                        break;
+                    case 1:
+                        clickName = 'config_start';
+                        break;
+                }
+
+                tcEventValues["click_name"] = clickName;
+
+                if (cursorValidation == 1)
+                    TcEventsTrigger(this, 'configurateur', tcEventValues);
+
+
+                cursorValidation++;
+
+            }
+
+            // Hide spinner loader
+            overlay.hide();
+
+            isConfigurateurProcess = false;
+            // eventToEmit.data = hideFields(eventToEmit.data)
+            document.dispatchEvent(eventToEmit)
+        }
+    };
+    xhr.send(body);
+}
+
+function updateTcProductID (needle, id, lengowSuffix) {
+    var dataAPI = { needle: needle, id: id };
+    if (typeof lengowSuffix !== 'undefined') {
+        dataAPI.lengowSuffix = lengowSuffix
+    }
+    try {
+        httpAPI.post(
+            "/api/products/datalayer/",
+            dataAPI,
+            function (err, val) {
+                if (err) {
+                    //error goes here
+                } else {
+                    val = JSON.parse(val)
+                    if (val) {
+                        tc_vars["product_id"] = val.tagNextPerf
+                        if (typeof val.productName !== 'undefined') {
+                            tc_vars["product_name"] = val.productName
+                        }
+                        document.querySelector('#productTagId').value = tc_vars["product_id"]
+                    }
+                }
+            }
+        )
+    } catch (error) {
+        console.error('==> An error has occurred while calling /nextperf/get-next-perf/ ', error)
+    }
+}
+
+/*
+ * Refresh the thumbnails list
+ * @param {Array} images
+ * @return {undefined}
+ */
+function changethumbnailsCaroussel (images, callback) {
+    var imageLoaded = 0
+    var stickyElement = document.querySelector('.stickyElement')
+    var galleryStyleElement = document.getElementById('style_small_gallery')
+    var bodyGalleryImgs = Array.from(document.querySelectorAll('.fp-body__image .flickity-slider img'))
+    var galleryOuterImgs = Array.from(document.querySelectorAll('.fp-product-gallery-outer .flickity-slider img'))
+    var toDeleteImg = []
+    var toAppendImg = []
+    var prevNextButtons, contain, draggable = true
+    var flkty = new Flickity('.productCarousel');
+    // The old gallery must be destroyed in order to be able to build a new one with parameters matching the number of images.
+    new Flickity('.productGalleryCarousel').destroy();
+    
+    if (images.length <= 4) {
+        if (!galleryStyleElement) {
+            galleryStyleElement = document.createElement('style')
+            galleryStyleElement.type = 'text/css'
+            galleryStyleElement.id = 'style_small_gallery'
+            document.getElementsByTagName('head')[0].appendChild(galleryStyleElement)
+            galleryStyleElement.appendChild(
+                document.createTextNode(
+                    '.fp-product-gallery > div:nth-child(1) > div:nth-child(1) {transform: translateX(39%) !important;}'
+                )
+            )
+        }
+        prevNextButtons = false
+        contain = true
+        draggable = false
+    } else {
+        if (galleryStyleElement) {
+            galleryStyleElement.remove()
+        }
+        prevNextButtons = true
+        contain = false
+        draggable = true
+    }
+    var flktyNav = new Flickity('.productGalleryCarousel', {
+        pageDots: false,
+        asNavFor: '.fp-product-carousel',
+        prevNextButtons: prevNextButtons,
+        contain: contain,
+        draggable: draggable
+    }).on('change', function (index) {
+		flkty.select(index)
+    })
+
+    images.forEach(function (image, index) {
+        var imageExists = false
+        bodyGalleryImgs.forEach(function (elem) {
+            if (elem.src == image) {
+                imageExists = true
+            }
+            if (images.indexOf(elem.src) < 0 && toDeleteImg.indexOf(elem.src) < 0) {
+                toDeleteImg.push(elem.src)
+            }
+        })
+
+        if (!imageExists) {
+            var altPic = image.split('StoresDiscount/')[1].split('.')[0].replace(/-/g, ' ');
+            var img = document.createElement('img');
+            img.onload = function () { ++imageLoaded }
+            img.onerror = function () { ++imageLoaded }
+            img.src = image;
+            img.setAttribute('alt', altPic);
+            toAppendImg.push(img)
+        }
+    })
+
+    toAppendImg.reverse().forEach(function (elem, index) {
+        flkty.prepend(elem)
+        flktyNav.prepend(elem.cloneNode(true))
+    })
+
+    bodyGalleryImgs.forEach(function (elem, index) {
+        if (toDeleteImg.indexOf(elem.src) >= 0) {
+            flkty.remove(elem)
+        }
+    })
+
+    galleryOuterImgs.forEach(function (elem) {
+        if (toDeleteImg.indexOf(elem.src) >= 0) {
+            flktyNav.remove(elem)
+        }
+    })
+
+
+    var buildTimeout = function () {
+        if (toAppendImg.length == imageLoaded) {
+            stickyElement.classList.add('active')
+            flkty.selectCell(0)
+            flktyNav.selectCell(0)
+            flkty.resize()
+            flktyNav.resize()
+            document.querySelector('#cartPic').src = document.querySelector('img.is-selected').src
+            if (typeof callback !== 'undefined') {
+                callback()
+            }
+        } else {
+            // alert('timeout')
+            setTimeout(buildTimeout, 200)
+        }
+    }
+    flkty.selectCell(0)
+    flktyNav.selectCell(0)
+    flkty.resize()
+    flktyNav.resize()
+    buildTimeout()
+}
+
+/**
+ * Z-end
+ * Envoie le Bundle au moteur de rendu de formulaire
+ * Le bundle (résultat de configurations.json) est une validation de produit
+ */
+function sendBundle () {
+    var event = document.createEvent('Event');
+    event.initEvent('olst-rendering-update', true, true);
+    var url = wmPrefixApiUrl;
+    var body = prefilledValues(lastCc);
+
+    isConfigurateurProcess = true;
+    displayLoader();
+
+    AjaxCall(url, body, event);
+}
+
+/**
+ * Place un observateur sur l'événement 'olst-rendering-changed'
+ * 'olst-rendering-changed' est généré à chaque modification dans le moteur de rendu de formulaire
+ */
+document.addEventListener('olst-rendering-changed', function (eventChanged) {
+    /**
+     * La configuration commerciale est présente dans l'objet 'eventChanged.data.cc',
+     * 'eventChanged.data.event' contient juste le nom de l'événement
+     * @type {Object}
+     */
+    lastCc = prefilledValues(eventChanged.data.cc);
+    if (counter > 0) {
+        // Demande une validation du formulaire
+        sendBundle();
+        // Remove from price label
+        if(document.querySelector('.from-price')) {
+            document.querySelector('.from-price').innerHTML =''
+        }
+    }
+    counter++;
+
+}, false);
+
+
+/**
+ * Affiche le loader
+ */
+function displayLoader () {
+
+    if (typeof overlay !== 'undefined') {
+        isConfigurateurProcess = false;
+        overlay.hide();
+    }
+
+    var opts = {
+        lines: 13, // The number of lines to draw
+        length: 11, // The length of each line
+        width: 5, // The line thickness
+        radius: 17, // The radius of the inner circle
+        corners: 1, // Corner roundness (0..1)
+        rotate: 0, // The rotation offset
+        color: '#FFF', // #rgb or #rrggbb
+        speed: 1, // Rounds per second
+        trail: 60, // Afterglow percentage
+        shadow: false, // Whether to render a shadow
+        hwaccel: false, // Whether to use hardware acceleration
+        className: 'spinner', // The CSS class to assign to the spinner
+        zIndex: 2e9, // The z-index (defaults to 2000000000)
+        top: 'auto', // Top position relative to parent in px
+        left: 'auto' // Left position relative to parent in px
+    };
+
+    var target = document.createElement("div");
+
+    document.body.appendChild(target);
+    var spinner = new Spinner(opts).spin(target);
+    overlay = iosOverlay({
+        text: "Chargement",
+        spinner: spinner
+    });
+
+}
+
+
+/**
+ * Met à jour le prix et les promo
+ * @param {number} vatPrice
+ * @param {number} vatPriceDiscount
+ * @param {number} quantity
+ */
+
+function displayPriceAndPromo (vatPrice, vatPriceDiscount, quantity) {
+    // Gestion des prix toujours > 0
+    var validePrices = updateLastKnowPrices({ "vatPrice": vatPrice, "vatPriceDiscount": vatPriceDiscount });
+    vatPrice = validePrices.vatPrice;
+    vatPriceDiscount = validePrices.vatPriceDiscount;
+    // 
+    if (document.querySelector("#prix_VATPrice")) {
+        document.querySelector("#prix_VATPrice").innerHTML = (((Math.round(vatPriceDiscount * 100) / 100) * parseInt(quantity))).toFixed(2).replace(/[.,]00$/, "")
+    }
+    if (vatPrice != vatPriceDiscount) {
+        document.querySelector("#titleprix_basePrice").innerHTML = (((Math.round(vatPrice * 100) / 100) * parseInt(quantity))).toFixed(2).replace(/[.,]00$/, "") + '&nbsp;&euro;'
+        document.querySelector("#cartprix_basePrice").innerHTML = (((Math.round(vatPrice * 100) / 100) * parseInt(quantity))).toFixed(2).replace(/[.,]00$/, "") + '&nbsp;&euro;'
+    }
+    if (document.querySelector(".buyer-info_title-minimum-price")) {
+        document.querySelector('.buyer-info_title-minimum-price').innerHTML = (Math.round(vatPriceDiscount * 100) / 100).toFixed(2) + ' &euro;'
+    }
+
+    // Gestion de l'affichage des promo
+    if (vatPriceDiscount != vatPrice) {
+        // Mise à jour de la promotion
+        var promoRate = (100 - Math.round((vatPriceDiscount / vatPrice) * 100)).toString();
+
+        if (periodeSoldes === undefined) {
+            periodeSoldes = null;
+        }
+
+        document.querySelector('.title-promo').innerHTML = "-" + promoRate + "%";
+        document.querySelector('.card-promo').innerHTML = "-" + promoRate + "%";
+        document.querySelector('.title-promo').style.display = 'inline-block';
+        document.querySelector('.card-promo').style.display = 'inline-block';
+        document.querySelector('.card-promo').classList.add('deskPromo')
+        document.querySelector("#prix_VATPrice").parentElement.classList.add('deskPrice')
+    } else {
+        document.querySelector('.title-promo').style.display = 'none';
+        document.querySelector('.card-promo').style.display = 'none';
+    }
+}
+
+/**
+ * Met à jour le cadre oney
+ * @param {number} vatPrice
+ * @param {number} vatPriceDiscount
+ * @param {number} quantity
+ */
+function displayOney (vatPrice, vatPriceDiscount, quantity) {
+    // Gestion des prix toujours > 0
+    var validePrices = updateLastKnowPrices({ "vatPrice": vatPrice, "vatPriceDiscount": vatPriceDiscount });
+    vatPrice = validePrices.vatPrice;
+    vatPriceDiscount = validePrices.vatPriceDiscount;
+    
+    // Gestion de l'affichage Oney
+    var oneyChoosePrice = vatPrice;
+    if (vatPriceDiscount < vatPrice) {
+        oneyChoosePrice = vatPriceDiscount;
+    }
+    if (oneyChoosePrice * parseInt(quantity) >= 100 && oneyChoosePrice * parseInt(quantity) <= 3000 && document.querySelector('#oney-3x-montant')) {
+        document.querySelector('#oney-3x-montant').innerHTML = ((Math.round((100 * (oneyChoosePrice * parseInt(quantity))) / 3) / 100)).toFixed(2);
+        document.querySelector('#oney-4x-montant').innerHTML = ((Math.round((100 * (oneyChoosePrice * parseInt(quantity))) / 4) / 100)).toFixed(2);
+        if (document.querySelector('#oney-3x-cout')) {
+            cout3x = Math.round((100 * (oneyChoosePrice * parseInt(quantity))) * 0.0145) / 100;
+            if (cout3x > 10) {
+                cout3x = 10;
+            }
+            document.querySelector('#oney-3x-cout').innerHTML = cout3x;
+        }
+        if (document.querySelector('#oney-4x-cout')) {
+            cout4x = Math.round((100 * (oneyChoosePrice * parseInt(quantity))) * 0.022) / 100;
+            if (cout4x > 20) {
+                cout4x = 20;
+            }
+            document.querySelector('#oney-4x-cout').innerHTML = cout4x;
+        }
+        document.querySelector('.financement-oney').style.display = 'flex';
+        document.querySelector('.bandeau-oney').style.display = 'none';
+    } else {
+        document.querySelector('.financement-oney').style.display = 'none';
+        document.querySelector('.bandeau-oney').style.display = 'block';
+        document.querySelector('.bandeau-oney .price-oney').textContent = 100;
+    }
+}
+
+/**
+ * Retourne une quantité absolue (entre 1 et > 1 entier only)
+ * @param {object} validationObject
+ *
+ * @return {number}
+ */
+function toAbsoluteQty (rawQty) {
+    return Math.abs(parseInt(rawQty)) || 1;
+}
+
+/**
+ * Met à jour les prix dans TagCommander (variable global à la vue phtml)
+ * @param {number} priceHt
+ * @param {number} priceDiscountHt
+ * @param {number} tva
+ */
+function updateTcPrice (priceHt, priceDiscountHt, tva) {
+    if (!hasErrorInRawValidation()) {
+
+        var promoRate = 1 - (priceDiscountHt / priceHt);
+        product_unitprice_tf = (priceDiscountHt).toFixed(2);
+        product_unitprice_ati = (priceDiscountHt * tva).toFixed(2);
+        product_discount_tf = (product_unitprice_tf * promoRate).toFixed(2);
+        product_discount_ati = (product_unitprice_ati * promoRate).toFixed(2);
+    }
+}
+
+/**
+ * Retourn true si la validation du formulaire a une erreur
+ * @return {boolean}
+ */
+function hasErrorInRawValidation () {
+    if (isConfigurateurProcess) {
+        // le configurateur est en cours 
+        // on est en erreur
+        return true;
+    }
+    if (typeof formRawValidation !== 'undefined') {
+        if (typeof formRawValidation.errors !== 'undefined' && Object.keys(formRawValidation.errors).length > 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Met à jour les derniers prix valides connues et retourne un objet avec les prix
+ * différent de 0 (prix n-1 si prix = 0)
+ * @param {object} priceObject      {vatPrice: number, vatPriceDiscount: number}
+ * @return {object}                 {vatPrice: number, vatPriceDiscount: number}
+ */
+function updateLastKnowPrices (priceObject) {
+    if (priceObject.vatPrice > 0) {
+        lastKnowPriceHt = priceObject.vatPrice;
+    }
+    if (priceObject.vatPriceDiscount > 0) {
+        lastKnowPriceDiscountHt = priceObject.vatPriceDiscount;
+    }
+    var pricesToShow = {
+        vatPrice: lastKnowPriceHt,
+        vatPriceDiscount: lastKnowPriceDiscountHt
+    };
+    return pricesToShow;
+}

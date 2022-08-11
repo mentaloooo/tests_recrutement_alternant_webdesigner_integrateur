@@ -1,0 +1,7 @@
+
+if (typeof tc_vars === 'undefined') {
+	//Instantiate DataLayer
+	tc_vars = {};
+}
+
+tc_vars["env_channel"]="d";tc_vars["env_template"]="product";tc_vars["page_name"]= "p-volet-roulant-renovation-alu-?uzkol=ok";tc_vars["env_work"]="prod";tc_vars["user_email_optin"]="";tc_vars["user_email"]="";tc_vars["product_id"]= "voletroulant_reno_pvc";tc_vars["product_sku"]= "PRD-44_volet-roulant-rnovation-new";tc_vars["product_name"]= "volet-roulant-renovation-alu";tc_vars["page_name"]= "p-volet-roulant-renovation-alu-?uzkol=ok";tc_vars["product_instock"]= "1";tc_vars["product_unitprice_ati"]= "54.36";tc_vars["product_discount_ati"]= "0";tc_vars["product_unitprice_tf"]= "45.3";tc_vars["product_discount_tf"]= "0";tc_vars["product_url_page"]= "https://www.stores-discount.com/p/volet-roulant-renovation-alu/";tc_vars["product_breadcrumb_label"]= ["Accueil","Volets roulants","Volets roulants renovation"];tc_vars["page_cat1"]= "Volets roulants";tc_vars["page_cat2"]= "Volets roulants renovation";

@@ -1,0 +1,229 @@
+//HTTP API instance
+var httpAPI = new easyHTTP();
+
+document.addEventListener('DOMContentLoaded', function () {
+  //dans le cas d'une modification de ligne panier, on met à  jour les champs dimension si l'unité de mesure est en centimètre
+  if (
+    document.querySelector('#sd-unit-of-measure') &&
+    document.querySelector('#sd-unit-of-measure').value == 'cm' &&
+    document.querySelector('#editCartLine').value != ''
+  ) {
+    var inputsArray = Array.from(document.querySelectorAll('#formulaire input[type=number]'));
+    inputsArray.forEach(function (input) {
+      input.value = input.value * 10;
+    });
+  }
+  // Notices downloadable
+  if (document.querySelector('.prise-mesure')) {
+    addListenerPopinNotice(
+      '#documentation .priseMesure',
+      'Prise de mesure',
+      document.querySelector('.prise-mesure').innerHTML
+    );
+  }
+
+  if (document.querySelector('.notice-pose')) {
+    addListenerPopinNotice(
+      '#documentation .notice',
+      'Notice de pose',
+      document.querySelector('.notice-pose').innerHTML
+    );
+  }
+
+  //Si on recharge la page suite à  une validation controlleur, il faut pouvoir désactiver les options désactivées
+  var selectOptionArray = Array.from(
+    document.querySelectorAll('select option')
+  );
+  selectOptionArray.forEach(function (option) {
+    //option.dispatchEvent('cssClassChanged');
+  });
+
+  if (document.querySelector('#SD-submit')) {
+    document
+      .querySelector('#SD-submit')
+      .addEventListener('mouseover', function () {
+        this.setAttribute('src', '/images/bois_tisse_std/bt_ajout_panier_on.jpg');
+      });
+
+    document
+      .querySelector('#SD-submit')
+      .addEventListener('mouseout', function () {
+        this.setAttribute('src', '/images/bois_tisse_std/bt_ajout_panier_off.jpg');
+      });
+
+    //Validation formulaire
+    document.querySelector('#SD-submit').addEventListener('click', function (e) {
+      // smooth scroll
+      if (hasErrorInRawValidation()) {
+        sendBundle();
+
+        //dispatching error to scroll on
+        var errorKey = Object.keys(formRawValidation.errors)[0];
+        var errorEvent = document.createEvent('Event');
+        errorEvent.initEvent('olst-default_handler-errors', true, true);
+        errorEvent.data = {};
+        errorEvent.data[errorKey] = 'error';
+        errorEvent.offsetTop = -235;
+        document.dispatchEvent(errorEvent);
+      } else {
+        manageDiscountPopin(e, e.target, function () {
+          sendTcDataAddToCart()
+          postAjaxForm(false)
+        })
+      }
+    });
+  }
+
+  //Event notices Tag Commander
+  if (document.querySelector('a[href$=".pdf"]')) {
+    document
+      .querySelector('a[href$=".pdf"]')
+      .addEventListener('click', function () {
+        TcEventsTrigger(this, 'notice', {
+          click_name: 'telechargement_notice',
+          product_quantity: document.getElementById('quantite').value,
+          product_sku: product_sku,
+          product_name: product_name,
+          product_id: tc_vars['product_id'],
+          product_color: tc_vars['product_color'],
+          product_breadcrum_label: breadcrum_label,
+          product_url_page: product_url_page,
+          product_unitprice_ati: product_unitprice_ati,
+          product_discount_ati: product_discount_ati,
+          product_unitprice_tf: product_unitprice_tf,
+          product_discount_tf: product_discount_tf,
+          product_url_picture: image_url
+        });
+      });
+  }
+
+  // Validation formulaire
+  if (document.querySelector('#btn')) {
+    document.querySelector('#btn').addEventListener('click', function () {
+      postAjaxForm(false);
+    });
+  }
+});
+
+var boxId;
+/**
+ * Gere le post du formulaire
+ */
+function postAjaxForm (devis) {
+  var submitBTN = document.getElementById('SD-submit');
+  submitBTN.classList.add('disabled');
+  var productBaseQuantity = Math.abs(parseInt(document.querySelector('#quantite').value)) || 1;
+  //Récupération de la dernière CC existante
+  var ccCopy = JSON.parse(lastCc);
+
+  // M2-200 add ask to have humanize with the good unit 
+  ccCopy['config_1']['prefilled_values']['humanize_unit'] = document.querySelector("#sd-unit-of-measure").value;
+  ccCopy.productName = tc_vars['product_name'];
+  ccCopy.quantite = productBaseQuantity;
+  ccCopy.urlNameLb = document.querySelector('#urlNameLb').value;
+  ccCopy.sdProductId = tc_vars.product_id;
+  ccCopy.sdProductSKU = tc_vars.product_sku;
+  if (typeof tcData !== 'undefined' && tcData !== null) {
+    for (var keyTcData in tcData) {
+      ccCopy['tc_' + keyTcData] = tcData[keyTcData];
+    }
+  }
+  ccCopy.cartItemId = document.querySelector('#editCartLine').value;
+
+  makeButtonLoad('loading');
+  httpAPI.post('/configurateur/add-to-cart/', ccCopy, function (err, response) {
+    if (err) {
+      submitBTN.classList.remove('disabled');
+    } else {
+      submitBTN.classList.remove('disabled');
+      if (document.querySelector('#editCartLine').value != '') {
+        window.location.href = '/commande/';
+      } else {
+        if (response && response.errorExist) {
+          makeButtonLoad('initialize');
+        } else if (response) {
+          makeButtonLoad('success');
+          setTimeout(function () { tinyCartPop(response) }, 1500)
+        }
+      }
+    }
+  });
+}
+
+function closeCurrentModal () {
+  document.querySelector('#' + boxId.getBoxId()).parentElement.removeChild(document.querySelector('#' + boxId.getBoxId()));
+  document.querySelector('#shadow_' + boxId.getBoxId()).parentElement.removeChild(document.querySelector('#shadow_' + boxId.getBoxId()));
+
+  //$('html, body').animate({ scrollTop: 0 })
+  scrollToElement(document.body);
+  var cartItemCount = document.querySelector('.headerPictoMP span').length;
+
+  var setRightCartImage = function () {
+    document.querySelector('.headerPictoEmptyMP').style.background = 'url("/modules/panier/img/panier-commande.png") no-repeat';
+  };
+  if (cartItemCount) {
+    var currentItemsInCart = parseInt(document.querySelector('.headerPictoMP span').innerHTML);
+    if (isNaN(currentItemsInCart)) {
+      setRightCartImage();
+      document.querySelector('.headerPictoMP span').innerHTML = Math.abs(parseInt(document.getElementById('quantite').value)) || 1;
+    } else {
+      document.querySelector('.headerPictoMP span').innerHTML = currentItemsInCart + Math.abs(parseInt(document.getElementById('quantite').value)) || 1;
+    }
+  } else {
+    setRightCartImage();
+    document.querySelector('.headerPictoEmptyMP span').innerHTML = Math.abs(parseInt(document.getElementById('quantite').value)) || 1;
+    document.querySelector('.headerPictoEmptyMP').setAttribute('class', 'headerPictoMP');
+  }
+
+  // location.reload();
+}
+
+function sendForm (element) {
+  //Envoyer le formulaire
+  document.querySelector('#formulaire').submit();
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+  var loadDescription = function () {
+    var descriptionZone = document.getElementById('fiche-descriptive');
+
+    if (descriptionZone && 'pageProductId' in descriptionZone.dataset) {
+      httpAPI.get(
+        '/configurateur/description/' +
+        descriptionZone.dataset.pageProductId +
+        '/',
+        function (err, response) {
+          if (err) {
+          } else {
+            descriptionZone.innerHTML = response.description;
+          }
+        }
+      );
+    }
+  };
+  var isOnScreen = function (el) {
+    if (el) {
+      var rect = el.getBoundingClientRect();
+      var elemTop = rect.top;
+      var elemBottom = rect.bottom;
+
+      // Only completely visible elements return true:
+      var isVisible = elemTop >= 0 && elemBottom <= window.innerHeight;
+      // Partially visible elements return true:
+      //isVisible = elemTop < window.innerHeight && elemBottom >= 0;
+      return isVisible;
+    }
+  };
+  var loadOnVisibility = function () {
+    if (isOnScreen(document.getElementById('fiche-descriptive'))) {
+      loadDescription();
+      document.removeEventListener('scroll', loadOnVisibility);
+    }
+  };
+
+  if (isOnScreen(document.getElementById('fiche-descriptive'))) {
+    loadDescription();
+  } else {
+    document.addEventListener('scroll', loadOnVisibility);
+  }
+});

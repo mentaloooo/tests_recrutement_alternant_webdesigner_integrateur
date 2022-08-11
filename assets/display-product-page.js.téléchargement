@@ -1,0 +1,212 @@
+/**
+ * Define global variable used in desktop and mobile views
+ * It may not be used anymore, I just moved it here to avoid duplication of code
+ */
+var product_unitprice_tf = 0;
+var product_unitprice_ati = 0;
+var product_discount_tf = 0;
+var product_discount_ati = 0;
+var lastKnowPriceHt = 0;
+var lastKnowPriceDiscountHt = 0;
+
+/**
+ * AB testing hid 89mm option
+ * And display/hide some ranges
+ * @param {*} recipe 
+ */
+function hideFields(recipe) {
+  var type = window.location.hash.split('=').pop()
+  switch (type) {
+    case 'tamisant':
+      // Enable ('screen' for 89mm and 127mm) and ('bois tiss?' only for 89mm) ranges
+      if (!recipe.validation.disabled_values.includes('OPT-230_bois-tiss')) {
+        recipe.validation.hidden_values.splice(recipe.validation.hidden_values.indexOf('GAM-51_bois-tiss'), 1)
+      }
+      if (recipe.validation.hidden_values.indexOf('GAM-52_screen-uni') !== -1) {
+        recipe.validation.hidden_values.splice(recipe.validation.hidden_values.indexOf('GAM-52_screen-uni'), 1)
+      }
+      break;
+    case 'voile':
+      delete recipe.fields['CH-138_largeur-de-bandes']['values']['OPT-224_89-mm']
+      break;
+    case 'anti-chaleur':
+      delete recipe.fields['CH-138_largeur-de-bandes']['values']['OPT-224_89-mm']
+      recipe.validation.hidden_values.splice(recipe.validation.hidden_values.indexOf('GAM-52_screen-uni'), 1)
+      break;
+  
+    default:
+      break;
+  }
+  return  recipe
+}
+
+/**
+ * Envoie la Recipe au moteur de rendu de formulaire
+ * La recipe (resultat de forms.json) est une pre-configuration de produit
+ * @param  {Object} exemple
+ */
+function sendRecipe (lengowSuffix, productId, recipe, subroutine) {
+  counter = 0;
+  var event = document.createEvent('Event');
+  event.initEvent('olst-rendering-update', true, true);
+  if (lengowSuffix) {
+    updateTcProductID(recipe['tc_data']['product_color'], productId, lengowSuffix)
+  }
+  changethumbnailsCaroussel(recipe.gallery, function () {
+    if (typeof subroutine !== 'undefined') {
+      subroutine()
+    }
+    
+    lastValidationKnow = hideFields(recipe);
+
+    var quantity = toAbsoluteQty($("#quantite").val());
+    formRawValidation = recipe.validation;
+    var recipeConfig = recipe;
+    updateTcPrice(recipeConfig.price.unitprice, recipeConfig.price.unitprice_discount, tva);
+    vatPriceDiscount = recipeConfig.price.unitprice_discount * tva;
+    vatPrice = recipeConfig.price.unitprice * tva;
+
+    // Gestion du prix et des promo
+    displayPriceAndPromo(vatPrice, vatPriceDiscount, quantity);
+    // Gestion Oney
+    displayOney(vatPrice, vatPriceDiscount, quantity);
+
+    if (recipe.humanized.specificProductName) {
+      tc_vars['product_name'] = recipe.humanized.specificProductName
+    }
+    event.data = JSON.stringify(recipe);
+    document.dispatchEvent(event)
+    updateLDandTag()
+    overlay.hide()
+  })
+}
+
+
+/**
+ * Add event listeners for gallery after load
+ */
+function addGalleryClickListener () {
+  Array.from(document.querySelectorAll('.visuel .section a')).forEach(function (el) {
+    el.addEventListener('click', function (e) {
+      document.querySelector('#visuelproduit').src = e.target.parentElement.getAttribute("data-url")
+    });
+  })
+}
+
+
+/**
+ * Update the json ld datas
+ */
+function updateLDandTag () {
+  var ldTag = document.querySelector('#jsonld-price')
+  var price = document.querySelector('#prix_basePrice') ? parseFloat(document.querySelector('#prix_basePrice').innerText.trim()) : false
+  var discountPrice = parseFloat(document.querySelector('#prix_VATPrice').innerText.trim())
+
+  if (ldTag) {
+    try {
+      var ldContent = JSON.parse(ldTag.innerText.trim())
+
+      ldContent['offers']['price'] = discountPrice.toString()
+      ldTag.innerText = JSON.stringify(ldContent)
+    } catch (e) {
+      console.log('jsonld not as a json format')
+    }
+  }
+  if (typeof tc_vars !== 'undefined') {
+
+    tc_vars['product_unitprice_ati'] = discountPrice
+    tc_vars['product_unitprice_tf'] = Math.round(discountPrice / 1.2 * 100) / 100
+    if (price) {
+      tc_vars['product_discount_ati'] = Math.round((price - discountPrice) * 100) / 100
+      tc_vars['product_discount_tf'] = Math.round((price - discountPrice) / 1.2 * 100) / 100
+    }
+  }
+}
+
+/**
+ * Manage when the hash change, if it's a new type of a same product
+ * @param {function} recipe The recipe of the form based on the product page
+ */
+function manageHashChange (callback, hash) {
+  document.addEventListener('DOMContentLoaded', function () {
+    window.preventHashReload()
+    window.addEventListener('hashchange', function (e) {
+      if (typeof hash !== 'undefined') {
+        callback(hash)
+      } else {
+        callback()
+      }
+
+    })
+  })
+}
+
+/**
+ * Manage the fragment in the url
+ * @param {object} recipe The recipe of the form based on the product page
+ * @param {integer} productId The id of the product
+ */
+function manageLengowURI (recipe, productId, subroutine, hash) {
+  if (typeof hash === 'undefined') {
+    hash = false
+  }
+
+  if ((window.location.hash && window.location.hash.indexOf('#type') >= 0) || hash) {
+    if (!hash) {
+      hash = window.location.hash
+    }
+    if (typeof tc_vars['product_url_page'] != 'undefined') {
+      tc_vars['product_url_page'] += hash
+    }
+
+    function loadProductPageFromHash (hash) {
+      if (typeof hash === 'undefined') {
+        hash = window.location.hash
+      }
+      var found = hash.match(/type=(.*)/)
+
+      if (found && found.length) {
+        var type = found[1]
+
+        xhr = new XMLHttpRequest()
+
+        if (typeof window.displayLoader !== 'undefined') {
+          displayLoader()
+        }
+        xhr.onreadystatechange = function (event) {
+          // XMLHttpRequest.DONE === 4
+          if (this.readyState === XMLHttpRequest.DONE) {
+            if (this.status === 200) {
+              var res = JSON.parse(this.responseText)
+              // For Lengow pages
+              sendRecipe(type, productId, res.config, subroutine)
+            } else {
+              sendRecipe(null, productId, recipe, subroutine)
+            }
+          }
+        }
+        xhr.open('POST', '/api/product/', true)
+        xhr.setRequestHeader("Content-Type", "application/json");
+        xhr.send(JSON.stringify({
+          "id": productId,
+          "lengowParam": type,
+          "version": "b"
+        }))
+      }
+    }
+
+    manageHashChange(loadProductPageFromHash)
+    loadProductPageFromHash(hash)
+  } else {
+    if (typeof window.displayLoader !== 'undefined') {
+      displayLoader()
+    }
+    sendRecipe(null, productId, recipe, subroutine)
+  }
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+  Array.from(document.querySelectorAll('.delivery-price-tag')).forEach(function (tag) {
+    tag.textContent = tag.dataset.price
+  })
+})

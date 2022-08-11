@@ -1,0 +1,362 @@
+var width = document.body.offsetWidth
+document.addEventListener('DOMContentLoaded', function () {
+	if (window.location.search.indexOf('from-cart=ok') == -1) {
+		window.location.hash = getLengowType(window.location.hash)
+	}
+	manageLengowURI(recipe, productId, function () { })
+})
+
+window.addEventListener('resize', function () {
+	if (width != document.body.offsetWidth) {
+		width = document.body.offsetWidth
+		document.querySelector('.stickyElement').removeAttribute('style')
+		document.querySelector('.stickyBuybox.fixed').removeAttribute('style')
+		if (width > 767) {
+			document.querySelector('.stickyElement').style.width = document.querySelector('.fp-body__left').offsetWidth + 'px'
+		} else {
+			document.querySelector('.stickyElement').removeAttribute('style')
+		}
+		document.querySelector('.stickyBuybox.fixed').style.width = document.querySelector('.buyBoxParent').offsetWidth + (width > 767 ? 0 : 24) + 'px'
+		window.scrollTo(0, 0)
+	}
+})
+
+/**
+   * Make page sroll to the top before reload to avoid problem with elements position
+   */
+window.onbeforeunload = function (e) {
+	document.querySelector('.stickyElement').removeAttribute('style')
+	document.querySelector('.stickyElement').className = 'stickyElement active'
+	window.scrollTo(0, 0)
+}
+
+/* FUNCTION getNextSibling - (NOT WORKING WITH IE11) */
+var getNextSibling = function (elem, selector) {
+
+	var sibling = elem.nextElementSibling
+
+	if (!selector) return sibling
+
+	while (sibling) {
+		if (sibling.matches(selector)) return sibling
+		sibling = sibling.nextElementSibling
+	}
+
+}
+
+
+
+/* COLLAPSES BEHAVIOR */
+var toggleCollapseContent = document.querySelectorAll(".accordion")
+for (var i = 0; i < toggleCollapseContent.length; i++) {
+	toggleCollapseContent[i].addEventListener("click", function () {
+
+		this.firstElementChild.classList.toggle('is-active')
+
+		//collapseContent = getNextSibling(this, ".collapseContent")
+
+		collapseSelection = this.firstElementChild.nextElementSibling
+		collapseSelection.classList.toggle('is-active')
+
+		collapseContent = this.nextElementSibling
+		collapseContent.classList.toggle('is-active')
+
+		setTimeout(function () { buyBoxSimplified() }, 300)
+
+	})
+}
+
+
+/* QUANTITY INPUT - (INCREASE AND DECREASE BUTTONS) */
+function increaseValue () {
+	var value = parseInt(document.getElementById('quantite').value, 10)
+	value = isNaN(value) ? 1 : value
+	value++
+	document.getElementById('quantite').value = value
+}
+function decreaseValue () {
+	var value = parseInt(document.getElementById('quantite').value, 10)
+	value = isNaN(value) ? 1 : value
+	value < 2 ? value = 2 : ''
+	value--
+	document.getElementById('quantite').value = value
+}
+
+
+
+/* TOGGLE IMAGE */
+var toggleImage = document.querySelectorAll(".toggleImage")
+for (var i = 0; i < toggleImage.length; i++) {
+	toggleImage[i].addEventListener("click", function () {
+
+		this.firstElementChild.classList.toggle('is-active')
+		this.firstElementChild.nextElementSibling.classList.toggle('is-active')
+
+		this.nextElementSibling.firstElementChild.classList.toggle('hide')
+		this.nextElementSibling.firstElementChild.nextElementSibling.classList.toggle('hide')
+
+	})
+}
+
+
+
+/* productCarousel : SARENZA EFFECT when click on arrows */
+setTimeout(function () {
+	var productCarousel = Flickity.data('.productCarousel')
+	var productGalleryCarousel = Flickity.data('.productGalleryCarousel')
+	productGalleryCarousel.on('change', function (index) {
+		productCarousel.select(index)
+	})
+}, 100)
+
+
+
+/* BUYBOX : SIMPLIFIED VERSION (.fixed) WHEN BOX IS STICKY */
+function buyBoxSimplified () {
+
+	var buyBox = document.querySelector('.buyBoxParent')
+	var stickyBuybox = document.querySelector('.stickyBuybox')
+	var stickyElement = document.querySelector('.stickyElement')
+	var buyBoxRect = buyBox.getBoundingClientRect()
+	var stickyBuyboxRect = stickyBuybox.getBoundingClientRect()
+	var stickyElementRect = stickyElement.getBoundingClientRect()
+
+	if (buyBoxRect.bottom + 110 < window.innerHeight) {
+		stickyBuybox.classList.remove('fixed')
+		stickyBuybox.removeAttribute('style')
+	} else {
+		stickyBuybox.classList.add('fixed')
+		stickyBuybox.style.width = buyBoxRect.width + (width > 767 ? 0 : 24) + 'px'
+	}
+
+	if (!stickyBuybox.classList.contains('fixed') && stickyBuyboxRect.bottom <= stickyElementRect.bottom && pageYOffset > 0 && stickyElementRect.top <= 0) {
+		stickyElement.classList.add('js-is-stuck')
+	} else if (stickyElement.classList.contains('js-is-stuck') && stickyElementRect.top > 0) {
+		stickyElement.classList.add('js-is-sticky')
+		stickyElement.classList.remove('js-is-stuck')
+	}
+
+}
+
+/* stickyNav : detailsSection SCROLLSPY */
+function stickyNavScrollSpy () {
+	var section = document.querySelectorAll('.detailsSection')
+	Array.prototype.forEach.call(section, function (e) {
+		if (e.offsetTop <= window.pageYOffset + 200) {
+			document.querySelector('.stickyNav li.is-active').classList.remove('is-active')
+			document.querySelector('.stickyNav a[href*=' + e.id + ']').parentNode.classList.add('is-active')
+		}
+	})
+}
+
+
+/* stickyNav : ALT STYLES (.js-is-sticky) WHEN NAV IS STICKY */
+function stickyNavStickyStyles () {
+	var stickyNav = document.querySelector('.stickyNav')
+	var fpDetails = document.querySelector('.fp-details')
+	var stickyNavBounding = stickyNav.getBoundingClientRect()
+	var fpDetailsBounding = fpDetails.getBoundingClientRect()
+	if (stickyNavBounding.top <= 0 && fpDetailsBounding.top <= stickyNavBounding.height) {
+		stickyNav.classList.add('js-is-sticky')
+	} else {
+		stickyNav.classList.remove('js-is-sticky')
+	}
+}
+
+/* stickyNav : ALT STYLES (.js-is-sticky) WHEN NAV IS STICKY */
+function stickyElementStickyStyles () {
+	var fpBody = document.querySelector('.fp-body__flex').getBoundingClientRect()
+	var stickyElement = document.querySelector('.stickyElement')
+	var stickyElementRect = stickyElement.getBoundingClientRect()
+	if (window.pageYOffset + 2 >= stickyElementRect.top && stickyElementRect.top <= 0 && fpBody.top <= 0) {
+		stickyElement.style.width = stickyElement.offsetWidth + 'px'
+		stickyElement.classList.add('js-is-sticky')
+	} else {
+		stickyElement.classList.remove('js-is-sticky')
+	}
+}
+
+
+/* ON SCROLL */
+window.onscroll = function (ev) {
+	if (width > 767) {
+		stickyElementStickyStyles()
+	}
+	buyBoxSimplified()
+	stickyNavScrollSpy()
+	stickyNavStickyStyles()
+}
+
+
+/* ON LOAD */
+setTimeout(function () {
+	buyBoxSimplified()
+	stickyNavScrollSpy()
+	stickyNavStickyStyles()
+	if (window.location.hash.indexOf('#type') >= 0  || document.querySelector('#lengowType')) {
+		var hash = (window.location.hash.indexOf('#type') >= 0) ? getLengowType(window.location.hash): '#type=' + document.querySelector('#lengowType').value
+		var topnavActive = document.querySelector('.fp-top-nav li.is-active')
+		if (topnavActive !== null) {
+			topnavActive.classList.remove('is-active');
+		}
+		var dataValueDomSelected = document.querySelector('[data-value="' + hash + '"]')
+		if (document.querySelector('[data-value="' + hash + '"]') !== null) {
+			dataValueDomSelected.parentElement.classList.add('is-active')
+		}
+		changeContent(hash)
+		var type = hash.slice(hash.lastIndexOf('=') + 1);
+		updateDynamicContent(type)
+	} else {
+		if (updateDynamicContent) {
+			updateDynamicContent('manuel');
+		}
+	}
+}, 200)
+
+  
+document.addEventListener('click', function (e) {
+	if (e.target.classList.contains('scrollAnchor')) {
+		var margin = 100
+		e.preventDefault()
+		var el = document.querySelector(e.target.getAttribute('href'))
+		// scrollToElement(document.querySelector(e.target.getAttribute('href')))
+		if (el.id.includes('presentation')) {
+			margin = 70
+		} 
+
+		window.scrollTo(0, (el.offsetTop + margin))
+	}
+
+	if (e.target.classList.contains('type-anchor')) {
+		var topnavActive = document.querySelector('.fp-top-nav li.is-active')
+		if (topnavActive !== null) {
+			topnavActive.classList.remove('is-active');
+		}
+		e.target.parentElement.classList.add('is-active')
+		changeContent(e.target.getAttribute('data-value'))
+		manageLengowURI(recipe, productId, function () { }, e.target.getAttribute('data-value'))
+	}
+})
+/**
+ * Update links of dynamique sections
+ * Or the sections that are included multiples times in different files
+ * @param {*} type 
+ */
+function updateDynamicContent(type) {
+	// Array.from(document.querySelectorAll('.desc_link')).forEach(function (elem, index) {
+	// 	elem.href = '#presentation_' + type
+	// })
+	// Array.from(document.querySelectorAll('.fabric_link')).forEach(function (elm, index) {
+	// 	elm.href = '#matieres_' + type
+	// })
+	// Array.from(document.querySelectorAll('.commande_link')).forEach(function (elm, index) {
+	// 	elm.href = '#commande_' + type
+	// })
+	// Array.from(document.querySelectorAll('.coffre_link')).forEach(function (elm, index) {
+	// 	elm.href = '#coffre_' + type
+	// })
+	// Array.from(document.querySelectorAll('.pose_link')).forEach(function (elm, index) {
+	// 	elm.href = '#pose_' + type
+	// })
+	// Array.from(document.querySelectorAll('.notices_link')).forEach(function (elm, index) {
+	// 	elm.href = '#notices_' + type
+	// })
+	// document.querySelector('.btn-notice').href = '#notices_' + type
+	// var title = document.querySelector('.fp-main-title')
+	// title.innerHTML = 'Volet roulant r&eacute;novation sur mesure - ' + getTitleType(type)
+}
+
+function getTitleType (type) {
+	switch (type) {
+		case 'manuel':
+			return 'Manuel'
+		case 'filaire':
+			return 'Motoris&eacute; filaire'
+		case 'radio':
+			return 'Motoris&eacute; t&eacute;l&eacute;command&eacute;'
+		case 'solaire':
+			return 'Motoris&eacute; solaire'
+	}
+}
+function changeContent (type) {
+	if (document.querySelector('.headDescription.active') !== null) {
+		if (!document.querySelector('.headDescription.active').classList.contains(type.match(/type=(.*)/)[1])) {
+			if (document.querySelector('.dynamicContent.active') !== null) {
+				document.querySelector('.dynamicContent.active').classList.remove('active')
+			}
+			if (document.querySelector('.headDescription.active') !== null) {
+				document.querySelector('.headDescription.active').classList.remove('active')
+			}
+		}
+	}
+	var activatedClass = ''
+	var selectedType = 'manuel'
+	document.querySelector('.dynamicContent').classList.add('active')
+	document.querySelector('.headDescription').classList.add('active')
+	activatedClass = '.dynamicContent'
+	selectedType = 'radio'
+	// updateDynamicContent(selectedType)
+	var flkty = new Flickity(activatedClass + ' .fp-product')
+	flkty.resize();
+}
+
+/**
+ * Create Zoom: https://github.com/sachinchoolur/lightgallery.js
+ */
+function generateLightGallery () {
+	var galleryHolder = document.createElement('div')
+	galleryHolder.id = 'lightGallery'
+	var selectedIndex
+	Array.from(document.querySelectorAll('.fp-body__image .flickity-slider img')).forEach(function (elem, index) {
+		if (elem.classList.contains('is-selected')) {
+			selectedIndex = index
+		}
+		var linkHolder = document.createElement('a')
+		linkHolder.href = elem.src
+		var img = document.createElement('img')
+		img.src = elem.src
+		img.alt = elem.alt
+		linkHolder.appendChild(img)
+		galleryHolder.appendChild(linkHolder)
+	})
+	document.body.appendChild(galleryHolder)
+	lightGallery(document.getElementById('lightGallery'), {
+		thumbnail: true
+	})
+	galleryHolder.children[selectedIndex].click()
+	document.body.style.overflowY = 'hidden'
+
+	galleryHolder.addEventListener('onCloseAfter', function (e) {
+		document.body.removeChild(galleryHolder)
+		document.body.style.overflowY = 'auto'
+	})
+}
+
+/**
+ * Return lengow type
+ * @param {*} full
+ * @param {String} hash #type=tamisant 
+ */
+ function getLengowType(hash) {
+	var availablePivots = ['manuel', 'filaire', 'radio', 'solaire']
+	var type =  hash.split('=')[1]
+	var filaireAssoc = ['motorisee','somfy','pvc-motorisee']
+	var manuelAssoc = ['blanc','gris','beige','brun','brun-fonce','anthracite','chene','noisette','acajou','chene-luxe',
+		'noisette-luxe','acajou-luxe','ivoire','argent','pvc-blanc','pvc','alu']
+	var solaireAssoc = ['solaire-standard','solaire-standard-PVC']
+	if (!availablePivots.includes(type)) {
+		if (filaireAssoc.includes(type)){
+			type = 'filaire'
+		} else if (manuelAssoc.includes(type)) {
+			type = 'manuel'
+		} else if(solaireAssoc.includes(type)) {
+			type = 'solaire'
+		} else {
+			type = 'radio'
+		}
+	}
+	return '#type=' + type
+}
+
+document.querySelector('.fp-btn-zoom').addEventListener('click', generateLightGallery)
+document.querySelector('.fp-buybox__image').addEventListener('click', generateLightGallery)

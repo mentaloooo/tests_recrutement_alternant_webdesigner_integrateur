@@ -1,0 +1,1 @@
+document.addEventListener("olst-default_handler-errors",function(event){setTimeout(function(){void 0!==event.data&&0!==Object.keys(event.data).length&&(error_fields=Object.keys(event.data),element_to_scroll=document.querySelector('label[for="'+error_fields[0]+'"]'),scrollToElement(element_to_scroll))},150)},!1);
